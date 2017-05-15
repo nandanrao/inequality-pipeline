@@ -1,0 +1,132 @@
+[
+  {
+    "format": "geotiff",
+    "name": "mobile_2009",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../mobile/2009.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "mobile_2011",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../mobile/2011.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "mobile_2012",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../mobile/2012.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "mobile_2013",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../mobile/2013.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "mobile_2014",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../mobile/2014.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "nl_2008",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../nightlight/2008.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "nl_2009",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../nightlight/2009.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "nl_2010",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../nightlight/2010.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "nl_2011",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../nightlight/2011.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "nl_2012",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../nightlight/2012.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "nl_2013",
+    "cache": "NONE",
+    "noData": 0.0, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../nightlight/2013.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "pop_2015",
+    "cache": "NONE",
+    "noData": -407649103380480, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../population/2015.tif"
+    }
+  },
+  {
+    "format": "geotiff",
+    "name": "pop_2010",
+    "cache": "NONE",
+    "noData": -407649103380480, 
+    "backend": {
+      "type": "hadoop",
+      "path": "../population/2010.tif"
+    }
+  }
+]

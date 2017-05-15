@@ -1,0 +1,27 @@
+{
+  "backend": {
+    "type": "hadoop",
+    "path": "etl/tiles"
+  },
+  "reprojectMethod": "buffered",
+  "pyramid": false,
+  "tileSize": 256,
+  "keyIndexMethod": {
+    "type": "zorder"
+  },
+  "cellSize":{
+    "width":0.008333333333333,
+    "height":0.008333333333333
+  },
+  "cellType": "float64",
+  "layoutExtent":{
+    "xmin": 17.8208770,
+    "ymin": -34.8476234,
+    "xmax": 32.8528770,
+    "ymax": -22.1456234
+  },
+  "resampleMethod": "cubic-spline",
+  "layoutScheme": "zoomed",
+  "crs": "EPSG:4326"
+}
+

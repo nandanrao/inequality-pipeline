@@ -1,0 +1,8 @@
+.ensime* 
+target
+metastore_db
+derby.log
+**/*.jar
+municipalities
+ZAF
+etl/tiles
