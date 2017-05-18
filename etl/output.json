@@ -9,7 +9,7 @@
   "keyIndexMethod": {
     "type": "zorder"
   },
-  "layoutScheme": "floating",
+  "layoutScheme": "zoomed",
   "resampleMethod": "cubic-spline",
   "crs": "EPSG:4326"
 }

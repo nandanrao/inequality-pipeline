@@ -18,5 +18,15 @@
       "type": "hadoop",
       "path": "./nightlight/2013.tif"
     }
+  },
+  {
+    "format": "geotiff",
+    "name": "pop_2015",
+    "cache": "NONE",
+    "noData": 0.0,
+    "backend": {
+      "type": "hadoop",
+      "path": "./population/2015.tif"
+    }
   }
 ]
