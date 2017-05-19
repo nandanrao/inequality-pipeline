@@ -44,7 +44,7 @@ object GroupByShape {
   def groupByVectorShapes[G <: Geometry](
     shapes: RDD[Feature[G, Int]],
     data: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]]
-  ) : RDD[(Int, Iterable[Double])] = {
+  ) : RDD[(Int, Double)] = {
 
     groupByRasterShapes(shapeToContextRDD(shapes, data.metadata), data)
   }
@@ -53,11 +53,10 @@ object GroupByShape {
     // Should the data be some different format??? Where do we specify the type!?!
     shapes: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     data: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]]
-  ) : RDD[(Int, Iterable[Double])] = {
+  ) : RDD[(Int, Double)] = {
 
     shapes
       .spatialLeftOuterJoin(data)
       .flatMap{ case (k, (t1, t2)) => t1.toArray.toSeq.zip(t2.get.toArrayDouble.toSeq) }
-      .groupByKey
   }
 }

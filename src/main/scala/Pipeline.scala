@@ -13,6 +13,7 @@ import geotrellis.raster.io.geotiff._
 import geotrellis.proj4._
 
 import GroupByShape._
+import Gini._
 
 object Pipeline {
   def main(args: Array[String]) {
@@ -34,7 +35,7 @@ object Pipeline {
       .appName("Pipeline")
       .getOrCreate()
 
-    implicit val isc : SparkContext = spark.sparkContext
+    implicit val sc : SparkContext = spark.sparkContext
 
     // switch for S3!
     // Read from the database created by ETL process (Hadoop FS)
@@ -48,36 +49,29 @@ object Pipeline {
     }
 
     // // We use this to query the ETL DB, avoids reading tiles that we won't use.
-    // val tilePath = "/Users/nandanrao/Documents/BGSE/inequality/pipeline/etl/tiles"
-    // val path = "./municipalities/2006/Election2006_Municipalities.shp"
-    // val countries : Seq[MultiPolygonFeature[Map[String, AnyRef]]] = ShapeFileReader.readMultiPolygonFeatures(path)
-    // val nl = makeRDD("nl_2013", tilePath, 0)
+    val tilePath = "/Users/nandanrao/Documents/BGSE/inequality/pipeline/etl/tiles"
+    val path = "./municipalities/2006/Election2006_Municipalities.shp"
+    val countries : Seq[MultiPolygonFeature[Map[String, AnyRef]]] = ShapeFileReader.readMultiPolygonFeatures(path)
+    val nl = makeRDD("nl_2013", tilePath, 8)
+    val pop = makeRDD("pop_2015", tilePath, 8)
     // val munis = makeRDD("municipalities", tilePath, 0)
-    // val countriesRDD = sc.parallelize(countries.take(30))
-    // val crdd = shapeToContextRDD(getId(countriesRDD, "MUNICID"), nl.metadata)
-    // writeTiff(crdd, "groupbyshape2.tif")
-    // countries.take(10).map(t => shapeToTile(t.geom, 1000, 1000, CRS.fromEpsgCode(4326))).map{ case (e, t) => Raster(t, e.extent)}.take(1)(0)
+    val countriesRDD = getId(sc.parallelize(countries.take(20)), "MUNICID")
+    
+    val nlGrouped = groupByVectorShapes(countriesRDD, nl)
+    val popGrouped = groupByVectorShapes(countriesRDD, pop)
 
-    // Performs efficient spatial join of two RDDs via SpatialKey
-    // Concats values (which should be seq's).
-    def joinSingles(
-      first: ContextRDD[SpatialKey, Seq[Tile], TileLayerMetadata[SpatialKey]],
-      second: ContextRDD[SpatialKey, Seq[Tile], TileLayerMetadata[SpatialKey]]) :
-        ContextRDD[SpatialKey, Seq[Tile], TileLayerMetadata[SpatialKey]] = {
-
-      val md = first.metadata
-      first.spatialJoin(second)
-        .withContext{ _.mapValues{ case (t1, t2) => t1 ++ t2 }}
-        .mapContext { bounds => md.updateBounds(bounds) }
+    val municipalities = nlGrouped.keys.distinct.collect.toList
+    val ginis = municipalities.map{ m =>
+      // map over each nl/pop pair???? 
+      // saves having to do the grouupByShape again... although you just have to spa
+      // spatitional joins fo r every year, which is the same operatioooon....
+      // unless you can actually trust it's ETL's perfectt, then you just zip...
+      // Or you can make a multiband raster with data fromm every year...? eh...
+      gini(nlGrouped.filter(_._1 == m).values, popGrouped.filter(_._1 == m).values)
     }
 
-    // Seq of RDD's
-    // def read(names: Seq[String]) = names.map(makeRDD(_, tilePath))
-
-    // read all normalized raster files from ETL Raster DB into RDDs
-    // val reduced = read(names)
-    //   .map(rdd => rdd.withContext{ _.mapValues(Seq(_))}) // Seq enables concatting together
-    //   .reduce(joinSingles)
+    println(ginis)
+    // write csv
 
     // def writeTiff(r: Raster[Tile], crs: CRS, f: String) : Unit = {
     //   GeoTiff(r, crs).write(f)
