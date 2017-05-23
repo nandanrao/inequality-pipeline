@@ -29,14 +29,17 @@ object Gini {
   val mult = (t: Tuple2[Double, Double]) => t._1*t._2
     
   def gini(nl: RDD[Double], pop: RDD[Double]) : Double = {
-    val sumOfPop = pop.sum
+    val cleaned = nl.zip(pop)
+      .filter{ case (n,p) => !n.isNaN && !p.isNaN } 
+      .filter{ case (n,p) => p >= 1.0 }
+
+    val sumOfPop = cleaned.map(_._2).sum
 
     // (Nightlight per Population, Weights)
-    val zipped = nl.zip(pop)
-      .filter{ case (n,p) => !n.isNaN && !p.isNaN }
-      .map{ case (n, p) => (div(n,p), div(p,sumOfPop))}
+    val zipped = cleaned
+      .map{ case (n, p) => (div(n,p), div(p,sumOfPop)) }
       .sortBy(_._1)
-    
+
     val weightedNl = zipped.map(mult)
     val sumOfWeightedVals = weightedNl.sum
 

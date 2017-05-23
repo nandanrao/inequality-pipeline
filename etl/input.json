@@ -6,7 +6,7 @@
     "noData": 0.0,
     "backend": {
       "type": "hadoop",
-      "path": "2006.tif"
+      "path": "./municipalities/2006.tif"
     }
   },
   {
