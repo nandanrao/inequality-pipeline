@@ -6,15 +6,16 @@ import org.apache.spark.sql.SparkSession
 import geotrellis.spark._
 import geotrellis.raster._
 import geotrellis.vector._
-import geotrellis.spark.io.hadoop._
+import geotrellis.spark.io.s3._
 import geotrellis.spark.io._
 import geotrellis.shapefile.ShapeFileReader
-import geotrellis.raster.io.geotiff._
+
 import geotrellis.proj4._
 
 import GroupByShape._
 import Gini._
 import Implicits._
+import Wealth._
 
 object Pipeline {
   def main(args: Array[String]) {
@@ -41,13 +42,14 @@ object Pipeline {
 
     implicit val sc : SparkContext = spark.sparkContext
 
-    // switch for S3!
-    // Read from the database created by ETL process (Hadoop FS)
+    // Read from the database created by ETL process (S3 FS)
+    // create a version for hadoop local! 
     def makeRDD(layerName: String, path: String, num: Int) = {
       val inLayerId = LayerId(layerName, num)
-      require(HadoopAttributeStore(path).layerExists(inLayerId))
+      val store = S3AttributeStore(path)
+      require(store.layerExists(inLayerId))
 
-      HadoopLayerReader(path)
+      S3LayerReader(store)
         .query[SpatialKey, Tile, TileLayerMetadata[SpatialKey]](inLayerId)
         .result
     }
@@ -56,44 +58,9 @@ object Pipeline {
     // val countries : Seq[MultiPolygonFeature[Map[String, AnyRef]]] = ShapeFileReader.readMultiPolygonFeatures(shapePath)
     val nl = makeRDD(nlCode, tilePath, 8)
     val pop = makeRDD(popCode, tilePath, 8)
-    // val countriesRDD = getId(sc.parallelize(countries.take(20)), "MUNICID") 
-    
-    // val nlGrouped = groupByVectorShapes(countriesRDD, nl)
-    // val popGrouped = groupByVectorShapes(countriesRDD, pop)
 
-    // val municipalities = nlGrouped.keys.distinct.collect.toList
-    // val ginis = municipalities.map{ m =>
-    // //   // map over each nl/pop pair???? 
-    // //   // saves having to do the grouupByShape again... although you just have to spa
-    // //   // spatitional joins fo r every year, which is the same operatioooon....
-    // //   // unless you can actually trust it's ETL's perfectt, then you just zip...
-    // //   // Or you can make a multiband raster with data fromm every year...? eh...
-    //   gini(nlGrouped.filter(_._1 == m).values, popGrouped.filter(_._1 == m).values)
-    // }
+    printRaster(nl, pop, crush.toDouble, topCode.toDouble, outFile)
+    // val countriesRDD = getId(sc.parallelize(countries.take(20)), "MUNICID")
 
-    // println(municipalities.zip(ginis))
-
-    val divd = nl                 
-      .withContext{ _.mapValues(_.convert(FloatCellType)) }                  
-      .spatialJoin(pop.withContext{ 
-        _.mapValues(_.localCrush(crush.toDouble).localTopCode(topCode.toDouble)) 
-      })
-      .withContext { _.combineValues( _ localDivide _) }                  
-      .mapContext{ bounds => TileLayerMetadata(FloatCellType, nl.metadata.layout, nl.metadata.extent, nl.metadata.crs, nl.metadata.bounds )}
-
-    // write csv
-
-    // def writeTiff(r: Raster[Tile], crs: CRS, f: String) : Unit = {
-    //   GeoTiff(r, crs).write(f)
-    // }
-
-    def writeTiff(
-      rdd: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
-      f: String) : Unit = {
-      GeoTiff(rdd.stitch.crop(rdd.metadata.extent), rdd.metadata.crs).write(f)
-    }
-
-    // writeTiff(nl, "reg-nl")
-    writeTiff(divd, outFile)
   }
 }

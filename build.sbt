@@ -20,9 +20,9 @@ libraryDependencies ++= Seq(
     exclude("org.locationtech", "geotrellis-spark"),
   "org.apache.spark" %% "spark-core" % "2.1.0" % "provided",
   "org.apache.spark" %% "spark-sql" % "2.1.0" % "provided",
-geotrellis-raster-testkit: Testkit for testing geotrellis-ra
-geotrellis-vector-testkit: Testkit for testing geotrellis-vector types
-geotrellis-spark-testkit
+  "org.locationtech.geotrellis" %% "geotrellis-raster-testkit" % "1.0.0" % "test",
+  "org.locationtech.geotrellis" %% "geotrellis-vector-testkit" % "1.0.0" % "test",
+  "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "1.0.0" % "test",
   "com.holdenkarau" %% "spark-testing-base" % "2.1.0_0.6.0" % "test",
   "org.scalactic" %% "scalactic" % "3.0.1" % "test",
   "org.scalatest" %% "scalatest" % "3.0.1" % "test"

@@ -23,14 +23,14 @@ object Gini {
   val div = (n:Double, d:Double) => Try(n/d).getOrElse(0.0) match {
     case x if (x.isNaN) => 0.0
     case x if (x.isInfinite) => 0.0
-    case x => x 
+    case x => x
   }
 
   val mult = (t: Tuple2[Double, Double]) => t._1*t._2
-    
+
   def gini(nl: RDD[Double], pop: RDD[Double]) : Double = {
     val cleaned = nl.zip(pop)
-      .filter{ case (n,p) => !n.isNaN && !p.isNaN } 
+      .filter{ case (n,p) => !n.isNaN && !p.isNaN }
       .filter{ case (n,p) => p >= 1.0 }
 
     val sumOfPop = cleaned.map(_._2).sum
@@ -50,7 +50,7 @@ object Gini {
   }
 
   def shiftzip[T: ClassTag, R: ClassTag](
-    one: RDD[T], 
+    one: RDD[T],
     two: RDD[R]
   ) : RDD[(T, R)] = {
     val partitioner = new HashPartitioner(one.partitions.length)
@@ -64,4 +64,3 @@ object Gini {
 
   // def cumsum(rdd: RDD[Double]) = rdd.scanLeft(0.0)(_+_)
 }
-
