@@ -31,7 +31,7 @@ object GroupByShape {
   }
 
   def shapeToContextRDD[G <: Geometry, T <: CellType](
-    shapes: RDD[Feature[G, Int]], 
+    shapes: RDD[Feature[G, Int]],
     md: TileLayerMetadata[SpatialKey]
   ) : RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]]= {
 
@@ -63,11 +63,11 @@ object GroupByShape {
         // We want to return a Seq of doubles no matter whether it's a tile or
         // multiband tile, so we match to treat them differently. In the case
         // of Tile, we return a seq with one element.
-         t2 match {
-           case Some(t: Tile) => 
-             t1.toArray.toSeq.zip(t.toArrayDouble.toSeq.map(Seq(_)))
-           case Some(t: MultibandTile) => 
-             t1.toArray.toSeq.zip(t.bands.map(_.toArrayDouble.toSeq).toSeq)
+        t2 match {
+          case Some(t: Tile) =>
+            t1.toArray.toSeq.zip(t.toArrayDouble.toSeq.map(Seq(_)))
+          case Some(t: MultibandTile) =>
+            t1.toArray.toSeq.zip(t.bands.map(_.toArrayDouble.toSeq).toSeq.transpose)
         }
       }}
   }

@@ -6,8 +6,6 @@ assemblyJarName in assembly := "Pipeline.jar"
 
 scalaVersion := "2.11.8"
 
-mainClass := Some("edu.upf.inequality.pipeline.Pipeline")
-
 libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "1.0.0",
   "org.locationtech.geotrellis" %% "geotrellis-proj4" % "1.0.0",
