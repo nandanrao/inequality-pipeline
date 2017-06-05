@@ -12,14 +12,6 @@ import geotrellis.spark.tiling.{FloatingLayoutScheme, LayoutDefinition}
 
 object GroupByShape {
 
-  def getId[G<: Geometry](
-    shapes: RDD[Feature[G,Map[String, AnyRef]]],
-    field: String
-  ) : RDD[Feature[G, Int]] = {
-
-    shapes.map(_.mapData(_(field).asInstanceOf[Int]))
-  }
-
   def shapeToTile(
     vec:Geometry, w:Double, h:Double, crs: CRS, value:Int = 1
   ) : Tuple2[ProjectedExtent, Tile] = {

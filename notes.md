@@ -12,11 +12,15 @@
 
 
 ## ETL 
-* Try with S3 backend
-* Run with all nightlight and pop (EMR cluster, figure out size)
+* Landscan convert to float, resample NN, divide by 4
+* NL -- convert to float, resample bicubic-spine
+* Shapes - convert to int, rasterize ID
+
 
 
 ## Scale
 * make multiband raster of wealth for entire world.
 * make countries shapefiles... 
 * Run Growth with countries shapefiles! 
+
+

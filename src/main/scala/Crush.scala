@@ -17,9 +17,15 @@ object Crush extends LocalTileBinaryOp {
   def combine(z1:Double,z2:Double) =
     if (z1 < z2) 0.0 
     else z1
+
+
+  def combine(z1:Float,z2:Float) =
+    if (z1 < z2) 0.toFloat 
+    else z1
 }
 
 trait CrushMethods extends MethodExtensions[Tile] {
   def localCrush(i: Int): Tile = Crush(self, i)
   def localCrush(d: Double): Tile = Crush(self, d)
+  def localCrush(f: Float): Tile = Crush(self, f)
 }

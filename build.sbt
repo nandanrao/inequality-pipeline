@@ -12,6 +12,7 @@ libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-raster" % "1.0.0",
   "org.locationtech.geotrellis" %% "geotrellis-vector" % "1.0.0",
   "com.redhat.et" %% "silex" % "0.1.1",
+  "com.github.seratch" %% "awscala" % "0.6.+",
   ("org.locationtech.geotrellis" %% "geotrellis-spark" % "1.0.0").
     exclude("org.locationtech", "geotrellis-spark"),
   ("org.locationtech.geotrellis" %% "geotrellis-spark-etl" % "1.0.0").

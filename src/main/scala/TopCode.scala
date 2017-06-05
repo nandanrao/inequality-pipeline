@@ -17,11 +17,16 @@ object TopCode extends LocalTileBinaryOp {
   def combine(z1:Double,z2:Double) =
     if (z1 > z2) z2 
     else z1
+
+  def combine(z1:Float, z2:Float) =
+    if (z1 > z2) z2 
+    else z1
 }
 
 trait TopCodeMethods extends MethodExtensions[Tile] {
   def localTopCode(i: Int): Tile = TopCode(self, i)
   def localTopCode(d: Double): Tile = TopCode(self, d)
+  def localTopCode(f: Float): Tile = TopCode(self, f)
 }
 
 

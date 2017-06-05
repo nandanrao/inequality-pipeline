@@ -2,25 +2,31 @@ package edu.upf.inequality.pipeline
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import geotrellis.shapefile.ShapeFileReader
+
 import geotrellis.spark._
 import geotrellis.raster._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import geotrellis.vector._
 
+// import edu.upf.inequality.pipeline.GroupByShape._
+// import edu.upf.inequality.pipeline.IO._
+// import edu.upf.inequality.pipeline.Growth._
+// import edu.upf.inequality.pipeline.Wealth._
+
 import GroupByShape._
 import IO._
 import Wealth._
 
+
 object Growth {
   def main(args: Array[String]) {
 
-    if (args.length != 10) {
+    if (args.length != 11) {
       System.err.println(s"""
         |Usage: Indexer <mobile>
         |  <tilePath> path to tiles
-        |  <shapePath> path to ShapeFile for aggregations
-        |  <shapeId> Id in shapefile (must be Int!!)
+        |  <shapeKey> path to ShapeFile for aggregations
+        |  <shapeId> Id in shapefile ("false" if we are using raster data?)
         |  <maxTileSize> max tile size
         |  <nlKeyA> key of nl A
         |  <nlKeyB> key of nl B
@@ -31,25 +37,24 @@ object Growth {
         """.stripMargin)
       System.exit(1)
     }
-    val Array(tilePath, shapePath, shapeId, maxTileSize, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = args
-    // val Array(tilePath, shapePath, maxTileSize, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "./municipalities/2006/Election2006_Municipalities.shp", "16384", "2012.tif", "2013.tif", "2015.tif", "4", "99999999", "growth-out-2")
+    val Array(tilePath, shapeKey, shapeId, maxTileSize, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = args
+    // val Array(tilePath, shapeKey, shapeId, maxTileSize, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "municipalities/2006/Election2006_Municipalities.shp", "MUNICID", "16384", "tiny-rasters/2012-tiny.tif", "tiny-rasters/2013-tiny.tif", "tiny-rasters/pop-2013-tiny.tif", "4", "99999999", "growth-out-2")
 
     implicit val spark : SparkSession = SparkSession.builder()
       .appName("Pipeline")
       .getOrCreate()
-
     implicit val sc : SparkContext = spark.sparkContext
 
     val tileSize = maxTileSize.toInt
-    val Seq(nlA, nlB, pop) = Seq(nlKeyA, nlKeyB, popKey).map(readRDD(tilePath, _, tileSize))
 
-    val countries : Seq[MultiPolygonFeature[Map[String, AnyRef]]] = ShapeFileReader.readMultiPolygonFeatures(shapePath)
+    val pop = readRDD(tilePath, popKey, tileSize)
 
-    // change this to actually work with our country dataset!
-    val shapes = getId(sc.parallelize(countries.take(20)), shapeId)
+    val Seq(wA, wB) = Seq(nlKeyA, nlKeyB)
+      .map(readRDD(tilePath, _, tileSize))
+      .map(wealthRaster(_, pop, crush.toDouble, topCode.toDouble))
 
-    val wA = wealthRaster(nlA, pop, crush.toDouble, topCode.toDouble)
-    val wB = wealthRaster(nlB, pop, crush.toDouble, topCode.toDouble)
+    val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wA.metadata) else readRDD(tilePath, shapeKey, tileSize)
+
     growth(wA, wB, shapes).coalesce(1).write.csv(outFile)
   }
 
@@ -74,6 +79,9 @@ object Growth {
     // Filter years that are NaN
     val y = years.filter{ case (a,b) => !a.isNaN && !b.isNaN }
 
+    println("Number of observations we are counting -------------------------------------")
+    println(y.count)
+
     // Calcs
     val tg = y.map(_._2).sum
     val wg = weightedGrowth(y)
@@ -84,15 +92,15 @@ object Growth {
   def growth[G <: Geometry](
     wealthA: ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]],
     wealthB: ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]],
-    shapes: RDD[Feature[G, Int]]
+    shapes: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]]
   )(implicit spark: SparkSession) : Dataset[GrowthRates] = {
     import spark.implicits._
-    val Seq(a,b) = Seq(wealthA, wealthB).map(groupByVectorShapes(shapes, _))
+    val Seq(a,b) = Seq(wealthA, wealthB).map(groupByRasterShapes(shapes, _))
 
     val l = a.join(b)
       .map{ case (k, (sa, sb)) => (k, (sa(0), sb(0)))} // Get only the wealth (first band)
 
-    val keys = a.keys.distinct.collect.toList
+    val keys = a.keys.distinct.collect.toList // take first x to limit? 
     val growthRates = keys.map(k => growth(l.filter(_._1 == k).values))
     spark.sparkContext.parallelize(keys.zip(growthRates)).map{ case (a,b) => GrowthRates(a,b)}.toDS
   }

@@ -53,14 +53,14 @@ object Wealth {
     topCode: Double
   ) = {
 
-    val minLight =  1 // We don't want any 0 NL values!
+    val minLight =  1.0 // We don't want any 0 NL values!
 
-    nl.withContext{ _.mapValues(_.convert(FloatCellType).localAdd(minLight)) }
+    nl.withContext{ _.mapValues(_.localAdd(minLight)) }
       .spatialJoin(pop.withContext{
         _.mapValues(_.localCrush(crush).localTopCode(topCode))
       })
       .withContext { _.combineValues( _ localDivide _) }
-      .mapContext{ bounds => TileLayerMetadata(FloatCellType, nl.metadata.layout, nl.metadata.extent, nl.metadata.crs, nl.metadata.bounds )}
+      .mapContext{ bounds => nl.metadata }
   }
 
   def wealthRaster(
@@ -74,7 +74,7 @@ object Wealth {
     wealth(nl, pop, crush, topCode)
       .spatialJoin(pop)
       .withContext( _.combineValues(MultibandTile(_, _)))
-      .mapContext{ bounds => TileLayerMetadata(FloatCellType, nl.metadata.layout, nl.metadata.extent, nl.metadata.crs, nl.metadata.bounds )}
+      .mapContext{ bounds => nl.metadata }
   }
 
   def writeTif(
