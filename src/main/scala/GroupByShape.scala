@@ -37,7 +37,7 @@ object GroupByShape {
   def groupByVectorShapes[G <: Geometry, T <: CellGrid : ClassTag](
     shapes: RDD[Feature[G, Int]],
     data: RDD[(SpatialKey, T)] with Metadata[TileLayerMetadata[SpatialKey]]
-  ) : RDD[(Int, Seq[Double])] = {
+  ) : RDD[(Int, Seq[Float])] = {
 
     groupByRasterShapes(shapeToContextRDD(shapes, data.metadata), data)
   }
@@ -46,20 +46,20 @@ object GroupByShape {
     // Should the data be some different format??? Where do we specify the type!?!
     shapes: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     data: RDD[(SpatialKey, T)] with Metadata[TileLayerMetadata[SpatialKey]]
-  ) : RDD[(Int, Seq[Double])] = {
+  ) : RDD[(Int, Seq[Float])] = {
 
     shapes
       .spatialLeftOuterJoin(data)
       .flatMap{ case (k, (t1, t2)) => {
 
-        // We want to return a Seq of doubles no matter whether it's a tile or
+        // We want to return a Seq of FLOAT no matter whether it's a tile or
         // multiband tile, so we match to treat them differently. In the case
         // of Tile, we return a seq with one element.
-        t2 match {
+         t2 match {
           case Some(t: Tile) =>
-            t1.toArray.toSeq.zip(t.toArrayDouble.toSeq.map(Seq(_)))
+            t1.toArray.zip(t.toArrayDouble.map(_.toFloat).map(Vector(_)))
           case Some(t: MultibandTile) =>
-            t1.toArray.toSeq.zip(t.bands.map(_.toArrayDouble.toSeq).toSeq.transpose)
+            t1.toArray.zip(t.bands.map(_.toArrayDouble.map(_.toFloat)).transpose)
         }
       }}
   }

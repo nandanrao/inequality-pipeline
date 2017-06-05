@@ -29,14 +29,14 @@ object IO {
   def readRDD(bucket: String, key: String, maxTileSize: Int)(implicit sc: SparkContext) = {
     val rdd = S3GeoTiffRDD
       .spatial(bucket, key, S3GeoTiffRDD.Options(maxTileSize = Some(maxTileSize)))
-    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(1024))
+    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(maxTileSize))
     ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
   }
 
   def readRDD(path: String, maxTileSize: Int)(implicit sc: SparkContext) = {
     val rdd = HadoopGeoTiffRDD
       .spatial(path, HadoopGeoTiffRDD.Options(maxTileSize = Some(maxTileSize)))
-    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(1024))
+    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(maxTileSize))
     ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
   }
 

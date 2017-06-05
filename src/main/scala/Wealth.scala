@@ -41,16 +41,15 @@ object Wealth {
       .getOrCreate()
     implicit val sc : SparkContext = spark.sparkContext
 
-    val nl = readRDD(tilePath, nlKey, maxTileSize.toInt)
-    val pop = readRDD(tilePath, popKey, maxTileSize.toInt)
-    writeTif(wealthRaster(nl, pop, crush.toDouble, topCode.toDouble), outFile)
+    val Seq(nl, pop) = Seq(nlKey, popKey).map(readRDD(tilePath, _, maxTileSize.toInt))
+    writeTif(wealthRaster(nl, pop, crush.toFloat, topCode.toFloat), outFile)
   }
 
   def wealth(
     nl: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     pop: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
-    crush: Double,
-    topCode: Double
+    crush: Float,
+    topCode: Float
   ) = {
 
     val minLight =  1.0 // We don't want any 0 NL values!
@@ -66,8 +65,8 @@ object Wealth {
   def wealthRaster(
     nl: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     pop: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
-    crush: Double,
-    topCode: Double
+    crush: Float,
+    topCode: Float
   ) : ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]]= {
     // create a multi-layer RDD that includes the population
 

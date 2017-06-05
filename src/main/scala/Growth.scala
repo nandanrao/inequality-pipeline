@@ -51,7 +51,7 @@ object Growth {
 
     val Seq(wA, wB) = Seq(nlKeyA, nlKeyB)
       .map(readRDD(tilePath, _, tileSize))
-      .map(wealthRaster(_, pop, crush.toDouble, topCode.toDouble))
+      .map(wealthRaster(_, pop, crush.toFloat, topCode.toFloat))
 
     val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wA.metadata) else readRDD(tilePath, shapeKey, tileSize)
 
@@ -59,7 +59,7 @@ object Growth {
   }
 
   // weighted growth is \sum \frac{y^2_{nrt}}{y_nrt-1}
-  def weightedGrowth(years: RDD[(Double, Double)]) : Double = {
+  def weightedGrowth(years: RDD[(Float, Float)]) : Double = {
     years.map{ case (a,b) => b*b / a  }.sum
   }
 
@@ -74,13 +74,10 @@ object Growth {
   }
 
   // Takes a simple RDD of one years nl/cap and the prev
-  def growth(years: RDD[(Double, Double)])(implicit spark: SparkSession) : Double = {
+  def growth(years: RDD[(Float, Float)])(implicit spark: SparkSession) : Double = {
 
     // Filter years that are NaN
     val y = years.filter{ case (a,b) => !a.isNaN && !b.isNaN }
-
-    println("Number of observations we are counting -------------------------------------")
-    println(y.count)
 
     // Calcs
     val tg = y.map(_._2).sum
@@ -97,8 +94,9 @@ object Growth {
     import spark.implicits._
     val Seq(a,b) = Seq(wealthA, wealthB).map(groupByRasterShapes(shapes, _))
 
-    val l = a.join(b)
-      .map{ case (k, (sa, sb)) => (k, (sa(0), sb(0)))} // Get only the wealth (first band)
+    // Both are products of leftOuterJoin on shapes, so we zip together to
+    // combine the keys. 
+    val l = a.zip(b).map{ case ((k, v1), (_, v2)) => (k, (v1(0), v2(0)))}
 
     val keys = a.keys.distinct.collect.toList // take first x to limit? 
     val growthRates = keys.map(k => growth(l.filter(_._1 == k).values))

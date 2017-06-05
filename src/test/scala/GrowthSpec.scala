@@ -22,13 +22,13 @@ class GrowthTest extends FlatSpec
 
   "Growth" should "Do something reasonable" in {
     val spark = new SQLContext(sc).sparkSession
-    val rdd = sc.parallelize(Seq(1.0,1.0,0.5).zip(Seq(1.0,1.0,1.0)))
+    val rdd = sc.parallelize(Seq(1.0,1.0,0.5).map(_.toFloat).zip(Seq(1.0,1.0,1.0).map(_.toFloat)))
     (growth(rdd)(spark) < 1) should be (true)
   }
 
   "Growth" should "Handle NaNs" in {
     val spark = new SQLContext(sc).sparkSession
-    val rdd = sc.parallelize(Seq(Double.NaN,1.0,1.0,0.5).zip(Seq(1.0,1.0,1.0,1.0)))
+    val rdd = sc.parallelize(Seq(Float.NaN,1.0,1.0,0.5).map(_.toFloat).zip(Seq(1.0,1.0,1.0,1.0).map(_.toFloat)))
     (growth(rdd)(spark) < 1) should be (true)
   }
 }
