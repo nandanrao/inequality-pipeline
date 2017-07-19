@@ -20,11 +20,12 @@ import IO._
 object Wealth {
 
   def main(args: Array[String]) {
-    if (args.length != 7) {
+    if (args.length != 8) {
       System.err.println(s"""
         |Usage: Indexer <mobile>
         |  <tilePath> path to tiles
         |  <maxTileSize> maxTileSize for
+        |  <numPartitions> partitions for raster RDDs
         |  <nlCode> code of desired nightlight in ETL database
         |  <popCode> code of desired population in ETL database
         |  <crush> Lower limit of population value to crush to 0
@@ -34,14 +35,16 @@ object Wealth {
       System.exit(1)
     }
 
-    val Array(tilePath, maxTileSize, nlKey, popKey, crush, topCode, outFile) = args
+    val Array(tilePath, maxTileSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = args
 
     implicit val spark : SparkSession = SparkSession.builder()
       .appName("Wealth")
       .getOrCreate()
     implicit val sc : SparkContext = spark.sparkContext
 
-    val Seq(nl, pop) = Seq(nlKey, popKey).map(readRDD(tilePath, _, maxTileSize.toInt))
+    val Seq(nl, pop) = Seq(nlKey, popKey)
+      .map(readRDD(tilePath, _, maxTileSize.toInt, numPartitions.toInt))
+
     writeTif(wealthRaster(nl, pop, crush.toFloat, topCode.toFloat), outFile)
   }
 
@@ -68,7 +71,7 @@ object Wealth {
     crush: Float,
     topCode: Float
   ) : ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]]= {
-    // create a multi-layer RDD that includes the population
+    // create a multiband RDD that includes the population
 
     wealth(nl, pop, crush, topCode)
       .spatialJoin(pop)

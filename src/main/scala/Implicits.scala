@@ -17,7 +17,7 @@ object Implicits {
     def cumsum() = rdd.scanLeft(0.0)(_+_).drop(1)
   }
 
-  implicit class withCodingMethods(val self: Tile) 
+  implicit class withCodingMethods(val self: Tile)
       extends CrushMethods
       with TopCodeMethods
 }

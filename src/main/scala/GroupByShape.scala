@@ -44,6 +44,7 @@ object GroupByShape {
 
   def groupByRasterShapes[T <: CellGrid : ClassTag](
     // Should the data be some different format??? Where do we specify the type!?!
+    // maybe the data tile should be a specific "wealth" tile that extends multiband? 
     shapes: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     data: RDD[(SpatialKey, T)] with Metadata[TileLayerMetadata[SpatialKey]]
   ) : RDD[(Int, Seq[Float])] = {
@@ -55,11 +56,12 @@ object GroupByShape {
         // We want to return a Seq of FLOAT no matter whether it's a tile or
         // multiband tile, so we match to treat them differently. In the case
         // of Tile, we return a seq with one element.
-         t2 match {
+        t2 match {
           case Some(t: Tile) =>
             t1.toArray.zip(t.toArrayDouble.map(_.toFloat).map(Vector(_)))
           case Some(t: MultibandTile) =>
             t1.toArray.zip(t.bands.map(_.toArrayDouble.map(_.toFloat)).transpose)
+          case None => throw new Exception("Shapes raster does not have the same tiling as the data rasters!")
         }
       }}
   }
