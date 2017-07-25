@@ -44,7 +44,7 @@ object GroupByShape {
 
   def groupByRasterShapes[T <: CellGrid : ClassTag](
     // Should the data be some different format??? Where do we specify the type!?!
-    // maybe the data tile should be a specific "wealth" tile that extends multiband? 
+    // maybe the data tile should be a specific "wealth" tile that extends multiband?
     shapes: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     data: RDD[(SpatialKey, T)] with Metadata[TileLayerMetadata[SpatialKey]]
   ) : RDD[(Int, Seq[Float])] = {

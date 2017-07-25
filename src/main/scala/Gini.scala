@@ -19,13 +19,14 @@ object Gini {
 
   def main(args: Array[String]) {
 
-    if (args.length != 9) {
+    if (args.length != 11) {
       System.err.println(s"""
         |Usage: Indexer <mobile>
         |  <tilePath> path to tiles
         |  <shapeKey> path to ShapeFile for aggregations
         |  <shapeId> Id in shapefile ("false" if we are using raster data?)
         |  <maxTileSize> max tile size
+        |  <layoutSize> size of floatingLayoutScheme
         |  <numPartitions> partitions for raster RDDS
         |  <nlKey> key of n
         |  <popKey> code of desired population in ETL database
@@ -35,20 +36,21 @@ object Gini {
         """.stripMargin)
       System.exit(1)
     }
-    val Array(tilePath, shapeKey, shapeId, maxTileSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = args
+    val Array(tilePath, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = args
+
+    // val Array(tilePath, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "simple/countries-europe.tif", "false", "256", "512", "1024", "simple/nl-2013-europe.tif", "simple/pop-2013-europe.tif", "4", "99999999", "s3://upf-inequality-raw-geotifs/growth-calcs-6-7")
 
     implicit val spark : SparkSession = SparkSession.builder()
       .appName("Gini")
       .getOrCreate()
     implicit val sc : SparkContext = spark.sparkContext
 
-    val tileSize = maxTileSize.toInt
-    val partitions = numPartitions.toInt
-    val pop = readRDD(tilePath, popKey, tileSize, partitions)
+    val Seq(tileSize, layout, partitions) = Seq(maxTileSize, layoutSize, numPartitions).map(_.toInt)
+    val pop = readRDD(tilePath, popKey, tileSize, layout, partitions)
 
-    val wealth = wealthRaster(readRDD(tilePath, nlKey, tileSize, partitions), pop, crush.toFloat, topCode.toFloat)
+    val wealth = wealthRaster(readRDD(tilePath, nlKey, tileSize, layout, partitions), pop, crush.toFloat, topCode.toFloat)
 
-    val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wealth.metadata) else readRDD(tilePath, shapeKey, tileSize, partitions)
+    val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wealth.metadata) else readRDD(tilePath, shapeKey, tileSize, layout, partitions)
 
     gini(wealth, shapes).coalesce(1).write.csv(outFile)
   }
@@ -93,11 +95,14 @@ object Gini {
       .distinct
       .collect.toList
 
+    // divide keys into two groups by size: do a groupByKey and map for small,
+    // and do this sequential distributed number for the big uns.
+
     val giniRates = keys.map{k =>
       println(s"nandan! Calculating gini for country code: ${k}")
       val g = grouped.filter(_._1 == k).values
-      val (nl, pop) = (g.map(_(0)), g.map(_(1)))
-      baseGini(nl, pop)
+      val (w, pop) = (g.map(_(0)), g.map(_(1)))
+      baseGini(w, pop)
     }
 
     import spark.implicits._
@@ -107,16 +112,16 @@ object Gini {
       .toDS
   }
 
-  def baseGini(nl: RDD[Double], pop: RDD[Double]) : Double = {
-    val cleaned = nl.zip(pop)
-      .filter{ case (n,p) => !n.isNaN && !p.isNaN }
-      .filter{ case (n,p) => p >= 1.0 }
+  def baseGini(w: RDD[Double], pop: RDD[Double]) : Double = {
+    val cleaned = w.zip(pop)
+      .filter{ case (w,p) => !w.isNaN && !p.isNaN }
+      .filter{ case (w,p) => p >= 1.0 }
 
     val sumOfPop = cleaned.map(_._2).sum
 
     // (Nightlight per Population, Weights)
     val zipped = cleaned
-      .map{ case (n, p) => (div(n,p), div(p,sumOfPop)) }
+      .map{ case (w, p) => (w, div(p,sumOfPop)) }
       .sortBy(_._1)
 
     val weightedNl = zipped.map(mult)
@@ -127,6 +132,8 @@ object Gini {
 
     shiftzip(nu, p).map(mult).sum - shiftzip(p, nu).map(mult).sum
   }
+
+  // gini with scala arrays!
 
   def shiftzip[T: ClassTag, R: ClassTag](
     one: RDD[T],

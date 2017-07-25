@@ -3,6 +3,9 @@ package edu.upf.inequality.pipeline
 import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext}
 import org.scalactic.TolerantNumerics
 import org.scalatest.{FlatSpec, Matchers}
+import org.apache.spark.sql.{SQLContext, SparkSession}
+
+import IO._
 import Gini._
 
 class GiniTest extends FlatSpec with SharedSparkContext with Matchers with RDDComparisons {
@@ -22,18 +25,33 @@ class GiniTest extends FlatSpec with SharedSparkContext with Matchers with RDDCo
     baseUnweightedGini(rdd)(sc) should equal (0.0)
   }
 
+  "Gini" should " read wealth raster and give a Gini" in {
+    val spark = new SQLContext(sc).sparkSession
+    val wealth = readMultibandRDD(getClass.getResource("/tiny.tif").toString())(sc)
+    val shapes = readRDD(getClass.getResource("/countries-tiny.tif").toString())(sc)
+    val g = gini(wealth, shapes)(spark).take(1)(0).gini
+    g should equal (0.742)
+  }
+
   "Gini" should "Takes custom weights" in {
     val l = List.fill(10)(1) map { _.asInstanceOf[Double] }
     val pop = { 1 to 10 toList } map { _.asInstanceOf[Double] }
     val rdd = sc.parallelize(l)
-    baseGini(rdd, sc.parallelize(pop)) should equal (.3)
+    baseGini(rdd, sc.parallelize(pop)) should equal (0.0)
   }
 
   "Gini" should "Takes custom weights v2" in {
     val l = List(1,1,5,5,10,10) map { _.asInstanceOf[Double] }
     val pop = List(10,10,1,1,10,10).map{ _.asInstanceOf[Double] }
     val g = baseGini(sc.parallelize(l), sc.parallelize(pop))
-    g should equal (.533)
+    g should equal (.410)
+  }
+
+  "Gini" should "Deal with extreme values in all ends" in {
+    val l = List(0.00001,1,5,5,10,10) map { _.asInstanceOf[Double] }
+    val pop = List(1000,10,1,1,10,10).map{ _.asInstanceOf[Double] }
+    val g = baseGini(sc.parallelize(l), sc.parallelize(pop))
+    g should equal (.978)
   }
 
   "Gini" should "Ignore observations with neither people nor gdp" in {

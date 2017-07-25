@@ -26,7 +26,8 @@ object IO {
     shapes.map(_.mapData(_(field).asInstanceOf[Int]))
   }
 
-  def readRDD(bucket: String, key: String, maxTileSize: Int, numPartitions: Int)(implicit sc: SparkContext) = {
+  // TODO: rework names, right now dif signature for S3
+  def readRDD(bucket: String, key: String, maxTileSize: Int, layoutSize: Int, numPartitions: Int)(implicit sc: SparkContext) = {
 
     val rdd = S3GeoTiffRDD
       .spatial(bucket, key,
@@ -35,21 +36,38 @@ object IO {
           numPartitions = Some(numPartitions)
         ))
 
-    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(maxTileSize))
+    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(layoutSize))
     ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
   }
 
-  def readRDD(path: String, maxTileSize: Int, numPartitions: Int)(implicit sc: SparkContext) = {
+
+  def readRDD(path: String, maxTileSize: Option[Int] = None, numPartitions: Option[Int] = None)(implicit sc: SparkContext) = {
 
     val rdd = HadoopGeoTiffRDD
       .spatial(path, HadoopGeoTiffRDD.Options(
-        maxTileSize = Some(maxTileSize),
-        numPartitions = Some(numPartitions)
+        maxTileSize = maxTileSize,
+        numPartitions = numPartitions
       ))
 
-    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(maxTileSize))
-    ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
+    val layout = FloatingLayoutScheme(maxTileSize.getOrElse(256))
+    val (_, md) = rdd.collectMetadata[SpatialKey](layout)
+    new ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
   }
+
+  def readMultibandRDD(path: String, maxTileSize: Option[Int] = None, numPartitions: Option[Int] = None)(implicit sc: SparkContext) = {
+
+    val rdd = HadoopGeoTiffRDD
+      .spatialMultiband(path, HadoopGeoTiffRDD.Options(
+        maxTileSize = maxTileSize,
+        numPartitions = numPartitions
+      ))
+
+    val layout = FloatingLayoutScheme(maxTileSize.getOrElse(256))
+    val (_, md) = rdd.collectMetadata[SpatialKey](layout)
+    new ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
+  }
+
+
 
   def readShapeFile(bucket: String, key: String, id: String)(implicit sc: SparkContext) : RDD[Feature[MultiPolygon, Int]] = {
 

@@ -19,3 +19,8 @@ gini <- function(x, weights=rep(1,length=length(x))){
         # zip and reduce _ + _ on both separate
         sum(nu[-1]*p[-n]) - sum(nu[-n]*p[-1])
 }
+
+# SCALA TESTS
+gini(rep(1, 10), 1:10) # 0.0
+gini(c(1,1,5,5,10,10), c(10,10,1,1,10,10)) # 0.4099379
+gini(c(0.00001,1,5,5,10,10), c(1000,10,1,1,10,10)) # 0.9781078
