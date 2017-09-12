@@ -6,22 +6,19 @@ assemblyJarName in assembly := "Pipeline.jar"
 
 scalaVersion := "2.11.8"
 
+dependencyOverrides += "com.fasterxml.jackson.core" % "jackson-core" % "2.6.5"
+dependencyOverrides += "com.fasterxml.jackson.core" % "jackson-databind" % "2.6.5"
+
 libraryDependencies ++= Seq(
-  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "1.0.0",
-  "org.locationtech.geotrellis" %% "geotrellis-proj4" % "1.0.0",
-  "org.locationtech.geotrellis" %% "geotrellis-raster" % "1.0.0",
-  "org.locationtech.geotrellis" %% "geotrellis-vector" % "1.0.0",
+  "org.apache.spark" %% "spark-core" % "2.1.1" % "provided",
+  "org.apache.spark" %% "spark-sql" % "2.1.1" % "provided",
+  "org.locationtech.geotrellis" %% "geotrellis-shapefile" % "1.2.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-proj4" % "1.2.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-raster" % "1.2.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-vector" % "1.2.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-spark" % "1.2.0-SNAPSHOT",
   "com.redhat.et" %% "silex" % "0.1.1",
   "com.github.seratch" %% "awscala" % "0.6.+",
-  ("org.locationtech.geotrellis" %% "geotrellis-spark" % "1.0.0").
-    exclude("org.locationtech", "geotrellis-spark"),
-  ("org.locationtech.geotrellis" %% "geotrellis-spark-etl" % "1.0.0").
-    exclude("org.locationtech", "geotrellis-spark"),
-  "org.apache.spark" %% "spark-core" % "2.1.0" % "provided",
-  "org.apache.spark" %% "spark-sql" % "2.1.0" % "provided",
-  "org.locationtech.geotrellis" %% "geotrellis-raster-testkit" % "1.0.0" % "test",
-  "org.locationtech.geotrellis" %% "geotrellis-vector-testkit" % "1.0.0" % "test",
-  "org.locationtech.geotrellis" %% "geotrellis-spark-testkit" % "1.0.0" % "test",
   "com.holdenkarau" %% "spark-testing-base" % "2.1.0_0.6.0" % "test",
   "org.scalactic" %% "scalactic" % "3.0.1" % "test",
   "org.scalatest" %% "scalatest" % "3.0.1" % "test"
@@ -33,6 +30,7 @@ parallelExecution in Test := false
 
 resolvers ++= Seq[Resolver](
   "LocationTech GeoTrellis Snapshots" at "https://repo.locationtech.org/content/repositories/geotrellis-snapshots",
+  "LocationTech GeoTrellis Releases" at "https://repo.locationtech.org/content/repositories/releases",
   "Geotools" at "http://download.osgeo.org/webdav/geotools/",
   "bintray-spark-packages" at "https://dl.bintray.com/spark-packages/maven/",
   "Will's bintray" at "https://dl.bintray.com/willb/maven/"
@@ -40,6 +38,7 @@ resolvers ++= Seq[Resolver](
 
 assemblyMergeStrategy in assembly := {
   case PathList("com", "vividsolutions", xs @ _*) => MergeStrategy.first
+  case PathList("com", "fasterxml", "jackson", "databind", xs @ _*) => MergeStrategy.deduplicate
   case x if Assembly.isConfigFile(x) =>
     MergeStrategy.concat
   case PathList(ps @ _*) if Assembly.isReadme(ps.last) || Assembly.isLicenseFile(ps.last) =>

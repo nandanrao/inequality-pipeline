@@ -8,10 +8,10 @@ import geotrellis.raster._
 import org.apache.spark.sql.{Dataset, SparkSession}
 import geotrellis.vector._
 
-// import edu.upf.inequality.pipeline.GroupByShape._
-// import edu.upf.inequality.pipeline.IO._
-// import edu.upf.inequality.pipeline.Growth._
-// import edu.upf.inequality.pipeline.Wealth._
+import edu.upf.inequality.pipeline.GroupByShape._
+import edu.upf.inequality.pipeline.IO._
+import edu.upf.inequality.pipeline.Growth._
+import edu.upf.inequality.pipeline.Wealth._
 
 import GroupByShape._
 import IO._
@@ -24,7 +24,7 @@ object Growth {
     if (args.length != 12) {
       System.err.println(s"""
         |Usage: Indexer <mobile>
-        |  <tilePath> path to tiles
+        |  <bucket> S3 bucket that prefixes everything, "false" for local file system
         |  <shapeKey> path to ShapeFile for aggregations
         |  <shapeId> Id in shapefile ("false" if we are using raster data?)
         |  <maxTileSize> max tile size
@@ -39,7 +39,7 @@ object Growth {
         """.stripMargin)
       System.exit(1)
     }
-    val Array(tilePath, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = args
+    val Array(bucket, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = args
 
     // val Array(tilePath, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "simple/countries-europe.tif", "false", "256", "512", "1024", "simple/nl-2012-europe.tif", "simple/nl-2013-europe.tif", "simple/pop-2013-europe.tif", "4", "99999999", "s3://upf-inequality-raw-geotifs/growth-calcs-6-7")
 
@@ -49,15 +49,16 @@ object Growth {
       .getOrCreate()
     implicit val sc : SparkContext = spark.sparkContext
 
+    val tilePath = if (bucket == "false") None else Some(bucket)
     val Seq(tileSize, layout, partitions) = Seq(maxTileSize, layoutSize, numPartitions).map(_.toInt)
 
-    val pop = readRDD(tilePath, popKey, tileSize, layout, partitions)
+    val pop = readRDD(tilePath, popKey, tileSize, layout, partitions)(sc)
 
     val Seq(wA, wB) = Seq(nlKeyA, nlKeyB)
-      .map(s => readRDD(tilePath, s, tileSize, layout, partitions))
+      .map(readRDD(tilePath, _, tileSize, layout, partitions)(sc))
       .map(wealthRaster(_, pop, crush.toFloat, topCode.toFloat)) // use two pops for wealths!!
 
-    val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wA.metadata) else readRDD(tilePath, shapeKey, tileSize, layout, partitions)
+    val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wA.metadata)(sc) else readRDD(tilePath, shapeKey, tileSize, layout, partitions)(sc)
 
     growth(wA, wB, shapes).coalesce(1).write.csv(outFile)
   }
@@ -65,6 +66,11 @@ object Growth {
   // weighted growth is \sum \frac{y^2_{nrt}}{y_nrt-1}
   def weightedGrowth(years: RDD[(Float, Float)]) : Double = {
     years.map{ case (a,b) => b*b / a  }.sum
+  }
+
+  // weighted growth is \sum \frac{y^2_{nrt}}{y_nrt-1}
+  def weightedGrowth2(years: RDD[(BigDecimal, BigDecimal)]) : BigDecimal = {
+    years.map{ case (a,b) => b*b / a  }.reduce(_ + _)
   }
 
   case class DI(growth:Double, index: Long)
@@ -77,19 +83,27 @@ object Growth {
     rdd.map{ case (d,i) => DI(d,i) }.toDF.stat.cov("growth", "index")
   }
 
+  case class DI2(growth:BigDecimal, index: Long)
+  def cov2(rdd: RDD[(BigDecimal, Long)])(implicit spark: SparkSession) : BigDecimal = {
+    import spark.implicits._
+    rdd.map{ case (d,i) => DI2(d,i) }.toDF.stat.cov("growth", "index")
+  }
+
   // Takes a simple RDD of one years nl/cap and the prev
-  def growth(years: RDD[(Float, Float)])(implicit spark: SparkSession) : Double = {
+  def growth(years: RDD[(Float, Float)])(implicit spark: SparkSession) : BigDecimal = {
+    val mc = new java.math.MathContext(256)
 
     // Filter years that are NaN
     val y = years
       .filter{ case (a,b) => !a.isNaN && !b.isNaN }
       .sortBy(_._2) // sort by "wealth" in current year
+      .map{ case (a,b) => (BigDecimal(a, mc), BigDecimal(b, mc))}
 
     // Calcs
-    val tg = y.map(_._2).sum
-    val wg = weightedGrowth(y)
-    val inclusiveGrowth = y.map{ case (a, b) => b/wg - a/tg } // or sort here?
-    cov(inclusiveGrowth.zipWithIndex)(spark)
+    val tg = y.map(_._2).reduce(_ + _)
+    val wg = weightedGrowth2(y)
+    val inclusiveGrowth = y.map{ case (a, b) => b/wg - a/tg }
+    cov2(inclusiveGrowth.zipWithIndex)(spark)
   }
 
   def growth[G <: Geometry](
@@ -104,7 +118,7 @@ object Growth {
     // Both are products of leftOuterJoin on shapes, so we zip together to
     // combine the keys.
     // the (0) index is the "wealth" part of the raster, we ignore the "population"
-    val l = a.zip(b).map{ case ((k, v1), (_, v2)) => (k, (v1(0), v2(0)))}
+    val l = a.zip(b).map{ case ((k, v1), (_, v2)) => (k, (v1(0), v2(0)))}.repartition(wealthA.partitions.length)
 
     // skip key of 0????
     val keys = a.keys
@@ -119,74 +133,52 @@ object Growth {
 
     spark.sparkContext
       .parallelize(keys.zip(growthRates))
-      .map{ case (a,b) => GrowthRates(a,b)}
+      .map{ case (a,b) => GrowthRates(a,b.toDouble)}
       .toDS
   }
 }
 
-// 128
 // +----+--------------------+
-// |code|                gini|
+// |code|              growth|
 // +----+--------------------+
-// | 122|  0.5985912285723316|
-// |   4|  -319.5529404093613|
-// | 166| -0.0795011980318776|
-// | 248| 0.49720438750227913|
-// | 229| -3366.9273441849145|
-// | 169|   0.796593396595199|
-// |  95|  0.6273615212018973|
-// |   7|  0.8148704896817094|
-// |  85|  0.7716855130129261|
-// | 199|2.118373959092423...|
+// | 122|-0.01028878405793...|
+// |   4|-0.00918841020230...|
+// | 229|-0.16324617223839397|
+// | 169|-0.03963957377885159|
+// |  95|0.001676121941737...|
+// | 166|-5.50689284732785...|
+// |   7|-0.01756434758658...|
+// | 248|-0.01174583334111...|
+// |  85| -0.1164307605889989|
+// | 199|0.002670610425490137|
 // +----+--------------------+
 
-// 256
-// +----+------------------+
-// |code|              gini|
-// +----+------------------+
-// | 122|0.7502577537725301|
-// |   4|0.7535888662969228|
-// | 229|0.9557211562932935|
-// | 169|0.7965933965524528|
-// |  95|0.6273615212018977|
-// | 166|0.6519216221889899|
-// |   7|0.8148704896817804|
-// | 248|0.6785285357145767|
-// |  85|0.7070609600486932|
-// | 199|0.7399530878901714|
-// +----+------------------+
+// +----+--------------------+
+// |code|              growth|
+// +----+--------------------+
+// | 122|-0.16404171671841267|
+// |   4|-0.00918841020230...|
+// | 229|-0.17182565528120336|
+// | 169|-0.03963957377885159|
+// |  95|0.001676121941737...|
+// | 166|  0.7904330845717524|
+// |   7|-0.01756434758658...|
+// | 248| -0.1009427870690889|
+// |  85|-0.14319069122371414|
+// | 199|-0.09041687719085308|
+// +----+--------------------+
 
-// 512
-// +----+------------------+
-// |code|              gini|
-// +----+------------------+
-// | 122|0.7502577537725301|
-// |   4|0.7535888663405785|
-// | 229| 0.814398089874885|
-// | 169|0.7965933965533623|
-// |  95|0.6273615212018977|
-// | 166|0.6519216221889899|
-// |   7|0.8148704896817804|
-// | 248|0.6785285357218527|
-// |  85|0.7070609600996249|
-// | 199|0.7399530878828955|
-// +----+------------------+
-
-// 768
-// +----+------------------+
-// |code|              gini|
-// +----+------------------+
-// | 122|0.7502577537725301|
-// |   4|0.7535888662969228|
-// | 229|0.8143980897584697|
-// | 169|0.7965933965524528|
-// |  95|0.6273615212018977|
-// | 166|0.6519216221889899|
-// |   7|0.8148704896817804|
-// | 248|0.6785285357182147|
-// |  85|0.7070609600777971|
-// | 199|0.7399530878828955|
-// +----+------------------+
-
-
-// 2 49 7.5 54
+// +----+--------------------+
+// |code|              growth|
+// +----+--------------------+
+// | 122| 0.02133221248827066|
+// |   4|-0.21089518015046158|
+// | 229|-0.18373785803761794|
+// | 169|-0.03963957377885159|
+// |  95|0.001676121941737...|
+// | 166|  0.7904330845717524|
+// |   7|                -0.0|
+// | 248| -0.1009427870690889|
+// |  85|-0.13533412701097827|
+// | 199|-0.09041687719085308|
+// +----+--------------------+

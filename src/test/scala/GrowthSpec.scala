@@ -29,8 +29,8 @@ class GrowthTest extends FlatSpec
 
   "Growth" should "Be invariant to order" in {
     val spark = new SQLContext(sc).sparkSession
-    val rddA = sc.parallelize(Seq(1.0,0.5,0.5).map(_.toFloat).zip(Seq(.9,1.0,1.1).map(_.toFloat)))
-    val rddB = sc.parallelize(Seq(0.5,0.5,1.0).map(_.toFloat).zip(Seq(1.1,1.0,.9).map(_.toFloat)))
+    val rddA = sc.parallelize(Seq(1.0,0.5,0.5, 3).map(_.toFloat).zip(Seq(.9,1.0,1.1).map(_.toFloat)))
+    val rddB = sc.parallelize(Seq(0.5,0.5,1.0, 3).map(_.toFloat).zip(Seq(1.1,1.0,.9).map(_.toFloat)))
     val gA = growth(rddA)(spark)
     val gB = growth(rddB)(spark)
     gA should equal (gB)

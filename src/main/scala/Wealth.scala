@@ -23,7 +23,7 @@ object Wealth {
     if (args.length != 9) {
       System.err.println(s"""
         |Usage: Indexer <mobile>
-        |  <tilePath> path to tiles
+        |  <bucket> S3 bucket that prefixes everything, "false" for local file system
         |  <maxTileSize> maxTileSize for
         |  <layoutSize> layout for floatingLayoutScheme
         |  <numPartitions> partitions for raster RDDs
@@ -36,7 +36,7 @@ object Wealth {
       System.exit(1)
     }
 
-    val Array(tilePath, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = args
+    val Array(bucket, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = args
 
     // val Array(tilePath, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "512", "512", "1024", "simple/nl-2013-small.tif", "simple/pop-2013-small.tif", "5", "999999999", "s3://upf-inequality-raw-geotifs/test-hdfs-out.tif")
 
@@ -47,7 +47,8 @@ object Wealth {
       .getOrCreate()
     implicit val sc : SparkContext = spark.sparkContext
 
-        val Seq(nl, pop) = Seq(nlKey, popKey)
+    val tilePath = if (bucket == "false") None else Some(bucket)
+    val Seq(nl, pop) = Seq(nlKey, popKey)
       .map(readRDD(tilePath, _, maxTileSize.toInt, layoutSize.toInt, numPartitions.toInt))
 
     writeTif(wealthRaster(nl, pop, crush.toFloat, topCode.toFloat), outFile)

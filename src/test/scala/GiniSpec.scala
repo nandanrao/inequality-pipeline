@@ -28,10 +28,22 @@ class GiniTest extends FlatSpec with SharedSparkContext with Matchers with RDDCo
   "Gini" should " read wealth raster and give a Gini" in {
     val spark = new SQLContext(sc).sparkSession
     val wealth = readMultibandRDD(getClass.getResource("/tiny.tif").toString())(sc)
-    val shapes = readRDD(getClass.getResource("/countries-tiny.tif").toString())(sc)
+    val shapes = readRDD(None, getClass.getResource("/countries-tiny.tif").toString())(sc)
     val g = gini(wealth, shapes)(spark).take(1)(0).gini
     g should equal (0.742)
   }
+
+  // "Gini" should "Give same results regardless of tiling strategy" in {
+  //   val spark = new SQLContext(sc).sparkSession
+  //   val wealth = readMultibandRDD(getClass.getResource("/wealth-holland.tif").toString(), Some(1024))(sc)
+  //   val shapes = readRDD(getClass.getResource("/countries-holland.tif").toString(), Some(1024))(sc)
+  //   val gA = gini(wealth, shapes)(spark).take(1)(0).gini
+
+  //   val wealthB = readMultibandRDD(getClass.getResource("/wealth-holland.tif").toString(), Some(24))(sc)
+  //   val shapesB = readRDD(getClass.getResource("/countries-holland.tif").toString(), Some(24))(sc)
+  //   val gB = gini(wealthB, shapesB)(spark).take(1)(0).gini
+  //   gA should equal (gB)
+  // }
 
   "Gini" should "Takes custom weights" in {
     val l = List.fill(10)(1) map { _.asInstanceOf[Double] }
@@ -92,12 +104,17 @@ class GiniTest extends FlatSpec with SharedSparkContext with Matchers with RDDCo
     baseGini(sc.parallelize(l), sc.parallelize(pop)) should equal (0.0)
   }
 
-  "shiftzip" should "Zip with different partitions" in {
-    val a = 1 to 20 toList
-    val b = 21 to 40 toList
-    val one = sc.parallelize(a, 3)
-    val two = sc.parallelize(b, 2)
-    val l = shiftzip(one,two).collect.toList.sortBy(_._1)
-    l should be ((2 to 20 toList ).zip( 21 to 39 toList ))
+
+  "Gini" should "Always give numbers between 0-1" in {
+    val l = List(1.0,Double.PositiveInfinity,1.0, 0.5, 0.9)
+    val pop = List(Double.NegativeInfinity,1.0,Double.NaN, 100, 5)
+    baseGini(sc.parallelize(l), sc.parallelize(pop)) should equal (0.0)
+  }
+
+  "rotateAndApply" should "apply subtraction on rotated values" in {
+    val a = 1 to 5 toSeq
+    val b = 2 to 6 toSeq
+    def minussum(x: Seq[Int], y: Seq[Int]) : Int = { x.zip(y).map(t => t._1 - t._2).reduce(_+_) }
+    rotateAndApply(a,b, minussum) should equal (-5)
   }
 }

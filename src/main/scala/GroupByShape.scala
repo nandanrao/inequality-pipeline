@@ -64,5 +64,7 @@ object GroupByShape {
           case None => throw new Exception("Shapes raster does not have the same tiling as the data rasters!")
         }
       }}
+      // .repartition(shapes.partitions.size)
+      // .mapValues(_.toSeq)
   }
 }

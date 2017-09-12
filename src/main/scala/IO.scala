@@ -3,7 +3,7 @@ package edu.upf.inequality.pipeline
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import geotrellis.spark.tiling._
-import geotrellis.spark.io.s3._
+// import geotrellis.spark.io.s3._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark._
 import geotrellis.raster._
@@ -26,32 +26,28 @@ object IO {
     shapes.map(_.mapData(_(field).asInstanceOf[Int]))
   }
 
-  // TODO: rework names, right now dif signature for S3
-  def readRDD(bucket: String, key: String, maxTileSize: Int, layoutSize: Int, numPartitions: Int)(implicit sc: SparkContext) = {
 
-    val rdd = S3GeoTiffRDD
-      .spatial(bucket, key,
-        S3GeoTiffRDD.Options(
-          maxTileSize = Some(maxTileSize),
-          numPartitions = Some(numPartitions)
-        ))
+  def readRDD(bucket: Option[String], key: String, maxTileSize: Int = 256, layoutSize: Int = 256, numPartitions: Int = 0)(implicit sc: SparkContext) = {
+
+    // TODO: make numPartitions an Option[Int] to remove hacky pattern matching for tests
+
+    val rdd = bucket match {
+
+      // case Some(b) => S3GeoTiffRDD
+      //     .spatial(b, key, S3GeoTiffRDD.Options(
+      //       maxTileSize = Some(maxTileSize),
+      //       numPartitions = numPartitions match { case 0 =>  None case _ => Some(numPartitions) }
+      //     ))
+
+      case None => HadoopGeoTiffRDD
+          .spatial(key, HadoopGeoTiffRDD.Options(
+            // maxTileSize = Some(maxTileSize),
+            numPartitions = numPartitions match { case 0 =>  None case _ => Some(numPartitions) }
+          ))
+    }
 
     val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(layoutSize))
     ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
-  }
-
-
-  def readRDD(path: String, maxTileSize: Option[Int] = None, numPartitions: Option[Int] = None)(implicit sc: SparkContext) = {
-
-    val rdd = HadoopGeoTiffRDD
-      .spatial(path, HadoopGeoTiffRDD.Options(
-        maxTileSize = maxTileSize,
-        numPartitions = numPartitions
-      ))
-
-    val layout = FloatingLayoutScheme(maxTileSize.getOrElse(256))
-    val (_, md) = rdd.collectMetadata[SpatialKey](layout)
-    new ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
   }
 
   def readMultibandRDD(path: String, maxTileSize: Option[Int] = None, numPartitions: Option[Int] = None)(implicit sc: SparkContext) = {
@@ -68,7 +64,8 @@ object IO {
   }
 
 
-
+  // TODO: Make this compatable with local file system
+  // and decide if we even want to read shapefiles...
   def readShapeFile(bucket: String, key: String, id: String)(implicit sc: SparkContext) : RDD[Feature[MultiPolygon, Int]] = {
 
     implicit val s3 = S3.at(Region.Ireland)
@@ -92,13 +89,13 @@ object IO {
   }
 
   def readShapeFile(
-    bucket: String,
+    bucket: Option[String],
     key: String,
     id: String,
     md: TileLayerMetadata[SpatialKey]
   )(implicit sc: SparkContext) : RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]] = {
 
-    shapeToContextRDD(readShapeFile(bucket, key, id), md)
+    shapeToContextRDD(readShapeFile(bucket.get, key, id), md)
   }
 
   def downloadObj(b: Bucket, key: String, outFile: String)(implicit s3: S3) = {
