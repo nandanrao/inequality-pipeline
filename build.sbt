@@ -17,6 +17,7 @@ libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-raster" % "1.2.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-vector" % "1.2.0-SNAPSHOT",
   "org.locationtech.geotrellis" %% "geotrellis-spark" % "1.2.0-SNAPSHOT",
+  "org.locationtech.geotrellis" %% "geotrellis-s3" % "1.2.0-SNAPSHOT",
   "com.redhat.et" %% "silex" % "0.1.1",
   "com.github.seratch" %% "awscala" % "0.6.+",
   "com.holdenkarau" %% "spark-testing-base" % "2.1.0_0.6.0" % "test",
