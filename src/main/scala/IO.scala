@@ -3,7 +3,7 @@ package edu.upf.inequality.pipeline
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import geotrellis.spark.tiling._
-// import geotrellis.spark.io.s3._
+import geotrellis.spark.io.s3._
 import geotrellis.spark.io.hadoop._
 import geotrellis.spark._
 import geotrellis.raster._
@@ -18,38 +18,41 @@ import GroupByShape._
 
 object IO {
 
-  def getId[G<: Geometry](
-    shapes: RDD[Feature[G,Map[String, AnyRef]]],
-    field: String
-  ) : RDD[Feature[G, Int]] = {
+/** Reads GeoTiff file and returns Geotrellis ContextRDD.
+  * Can read from either AWS S3 (if given a bucket), or from HDFS
+  * (which also works for local files and therefore for Marenostrums GPFS).
+  */
+  def readRDD(
+    bucket: Option[String],
+    key: String,
+    maxTileSize: Int = 256,
+    layoutSize: Int = 256,
+    numPartitions: Option[Int] = None
+  )(implicit sc: SparkContext) = {
 
-    shapes.map(_.mapData(_(field).asInstanceOf[Int]))
-  }
+    val repartitioned = bucket match {
 
-
-  def readRDD(bucket: Option[String], key: String, maxTileSize: Int = 256, layoutSize: Int = 256, numPartitions: Int = 0)(implicit sc: SparkContext) = {
-
-    // TODO: make numPartitions an Option[Int] to remove hacky pattern matching for tests
-
-    val rdd = bucket match {
-
-      // case Some(b) => S3GeoTiffRDD
-      //     .spatial(b, key, S3GeoTiffRDD.Options(
-      //       maxTileSize = Some(maxTileSize),
-      //       numPartitions = numPartitions match { case 0 =>  None case _ => Some(numPartitions) }
-      //     ))
+      case Some(b) => S3GeoTiffRDD
+          .spatial(b, key, S3GeoTiffRDD.Options(
+            maxTileSize = Some(maxTileSize),
+            numPartitions = numPartitions
+          ))
 
       case None => HadoopGeoTiffRDD
           .spatial(key, HadoopGeoTiffRDD.Options(
-            // maxTileSize = Some(maxTileSize),
-            numPartitions = numPartitions match { case 0 =>  None case _ => Some(numPartitions) }
+            maxTileSize = Some(maxTileSize),
+            numPartitions = numPartitions
           ))
     }
 
-    val (_, md) = rdd.collectMetadata[SpatialKey](FloatingLayoutScheme(layoutSize))
-    ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
+    val (_, md) = repartitioned.collectMetadata[SpatialKey](FloatingLayoutScheme(layoutSize))
+    ContextRDD(repartitioned.tileToLayout[SpatialKey](md), md)
   }
 
+/** Multiband version of readRDD.
+  * Currently only used by tests. Presumably useful for reading our Wealth rasters if
+  * they are pre-created in the future.
+  */
   def readMultibandRDD(path: String, maxTileSize: Option[Int] = None, numPartitions: Option[Int] = None)(implicit sc: SparkContext) = {
 
     val rdd = HadoopGeoTiffRDD
@@ -63,6 +66,23 @@ object IO {
     new ContextRDD(rdd.tileToLayout[SpatialKey](md), md)
   }
 
+ // Helper function used to read shape files, simply gets the
+ // given ID field from the shape file "feature" format.
+ def getId[G<: Geometry](
+    shapes: RDD[Feature[G,Map[String, AnyRef]]],
+    field: String
+  ) : RDD[Feature[G, Int]] = {
+
+    shapes.map(_.mapData(_(field).asInstanceOf[Int]))
+  }
+
+  // Downloads from S3, as there was no shapefile reading from
+  // S3, geoTrellis only offered it from local files, so the shapefile
+  // here needed to be downloaded and read locally by one executor.
+  def downloadObj(b: Bucket, key: String, outFile: String)(implicit s3: S3) = {
+    val s3obj: Option[S3Object] = b.getObject(key)
+    s3obj.map(_.getObjectContent).map(copy(_, new java.io.FileOutputStream(outFile)))
+  }
 
   // TODO: Make this compatable with local file system
   // and decide if we even want to read shapefiles...
@@ -96,10 +116,5 @@ object IO {
   )(implicit sc: SparkContext) : RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]] = {
 
     shapeToContextRDD(readShapeFile(bucket.get, key, id), md)
-  }
-
-  def downloadObj(b: Bucket, key: String, outFile: String)(implicit s3: S3) = {
-    val s3obj: Option[S3Object] = b.getObject(key)
-    s3obj.map(_.getObjectContent).map(copy(_, new java.io.FileOutputStream(outFile)))
   }
 }

@@ -24,11 +24,11 @@ object Wealth {
       System.err.println(s"""
         |Usage: Indexer <mobile>
         |  <bucket> S3 bucket that prefixes everything, "false" for local file system
-        |  <maxTileSize> maxTileSize for
-        |  <layoutSize> layout for floatingLayoutScheme
-        |  <numPartitions> partitions for raster RDDs
-        |  <nlCode> code of desired nightlight in ETL database
-        |  <popCode> code of desired population in ETL database
+        |  <maxTileSize> max tile size (Geotrellis file-reading option)
+        |  <layoutSize> size of floatingLayoutScheme (Geotrellis tiling option)
+        |  <numPartitions> partitions for raster RDDS - false if none (Geotrellis default of 1!)
+        |  <nlKey> Nightlight file path
+        |  <popKey> Population file path
         |  <crush> Lower limit of population value to crush to 0
         |  <topCode> Upper limit of population value to topcode
         |  <outFile> name of file to print out
@@ -38,8 +38,6 @@ object Wealth {
 
     val Array(bucket, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = args
 
-    // val Array(tilePath, maxTileSize, layoutSize, numPartitions, nlKey, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "512", "512", "1024", "simple/nl-2013-small.tif", "simple/pop-2013-small.tif", "5", "999999999", "s3://upf-inequality-raw-geotifs/test-hdfs-out.tif")
-
     implicit val spark : SparkSession = SparkSession.builder()
       .appName("Wealth")
       .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
@@ -48,12 +46,19 @@ object Wealth {
     implicit val sc : SparkContext = spark.sparkContext
 
     val tilePath = if (bucket == "false") None else Some(bucket)
+
+    val Seq(tileSize, layout) = Seq(maxTileSize, layoutSize).map(_.toInt)
+    val partitions = if (numPartitions == "false") None else Some(numPartitions.toInt)
+
     val Seq(nl, pop) = Seq(nlKey, popKey)
-      .map(readRDD(tilePath, _, maxTileSize.toInt, layoutSize.toInt, numPartitions.toInt))
+      .map(readRDD(tilePath, _, tileSize, layout, partitions))
 
     writeTif(wealthRaster(nl, pop, crush.toFloat, topCode.toFloat), outFile)
   }
 
+  /** Calculates wealth-per-population for each pixel, returns ContextRDD.
+    * Takes care of all coding issues along the way!
+    */
   def wealth(
     nl: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     pop: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
@@ -61,7 +66,7 @@ object Wealth {
     topCode: Float
   ) = {
 
-    val minLight =  1.0 // We don't want any 0 NL values!
+    val minLight =  1.0 // We don't want any 0 NL values! TODO: move this!
 
     nl.withContext{ _.mapValues(_.localAdd(minLight)) }
       .spatialJoin(pop.withContext{
@@ -71,13 +76,16 @@ object Wealth {
       .mapContext{ bounds => nl.metadata }
   }
 
+  /** Creates our Wealth raster, returns as a Context RDD
+    * Creates a Multiband raster file with wealth, population as the two bands.
+    */
+
   def wealthRaster(
     nl: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     pop: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     crush: Float,
     topCode: Float
   ) : ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]]= {
-    // create a multiband RDD that includes the population
 
     wealth(nl, pop, crush, topCode)
       .spatialJoin(pop)
@@ -87,12 +95,9 @@ object Wealth {
 
   def writeTif(
     rdd: RDD[(SpatialKey, MultibandTile)] with Metadata[TileLayerMetadata[SpatialKey]],
-    f: String
+    uri: String
   )(implicit sc: SparkContext) : Unit = {
 
-    // quick hack so we can either use s3a urls or absolute/relative paths, in which
-    // case we want the local file system so we prefix with file://
-    val uri = if (f.matches("^s3a://.+")) f else s"file://${f}"
     val fs = org.apache.hadoop.fs.FileSystem.get(new java.net.URI(uri), sc.hadoopConfiguration)
     val stream = fs.create(new org.apache.hadoop.fs.Path(uri))
     val tif = GeoTiff(rdd.stitch.crop(rdd.metadata.extent), rdd.metadata.crs)

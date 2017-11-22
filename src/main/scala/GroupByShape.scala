@@ -28,7 +28,7 @@ object GroupByShape {
   ) : RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]]= {
 
     val l = md.layout
-    val crs = CRS.fromEpsgCode(4326)
+    val crs = CRS.fromEpsgCode(4326) // TODO: This is harcoded EPSG for our source grid!
     val rdd = shapes.map(f => shapeToTile(f.geom, l.cellwidth, l.cellheight, crs, f.data))
     val newMd : TileLayerMetadata[SpatialKey] = rdd.collectMetadata(crs, md.layout)
     ContextRDD(rdd.tileToLayout[SpatialKey](newMd), newMd)
@@ -42,9 +42,11 @@ object GroupByShape {
     groupByRasterShapes(shapeToContextRDD(shapes, data.metadata), data)
   }
 
+  /** For use when the input "aggregation regions" are given as a raster.
+    * Takes the
+    */
   def groupByRasterShapes[T <: CellGrid : ClassTag](
-    // Should the data be some different format??? Where do we specify the type!?!
-    // maybe the data tile should be a specific "wealth" tile that extends multiband?
+    // TODO: maybe the data tile should be a specific "Wealth" type that extends multiband?
     shapes: RDD[(SpatialKey, Tile)] with Metadata[TileLayerMetadata[SpatialKey]],
     data: RDD[(SpatialKey, T)] with Metadata[TileLayerMetadata[SpatialKey]]
   ) : RDD[(Int, Seq[Float])] = {
@@ -64,7 +66,5 @@ object GroupByShape {
           case None => throw new Exception("Shapes raster does not have the same tiling as the data rasters!")
         }
       }}
-      // .repartition(shapes.partitions.size)
-      // .mapValues(_.toSeq)
   }
 }

@@ -6,6 +6,7 @@ import org.apache.spark.SparkContext
 import geotrellis.spark._
 import geotrellis.raster._
 import org.apache.spark.sql.{Dataset, SparkSession}
+import org.apache.spark.storage.{StorageLevel}
 import geotrellis.vector._
 
 import edu.upf.inequality.pipeline.GroupByShape._
@@ -21,17 +22,18 @@ import Wealth._
 object Growth {
   def main(args: Array[String]) {
 
-    if (args.length != 12) {
+    if (args.length != 13) {
       System.err.println(s"""
         |Usage: Indexer <mobile>
         |  <bucket> S3 bucket that prefixes everything, "false" for local file system
-        |  <shapeKey> path to ShapeFile for aggregations
-        |  <shapeId> Id in shapefile ("false" if we are using raster data?)
-        |  <maxTileSize> max tile size
-        |  <layoutSize> size of floatingLayoutScheme
-        |  <numPartitions> partitions for RDD Raster reading
-        |  <nlKeyA> key of nl A
-        |  <nlKeyB> key of nl B
+        |  <shapeKey> path to ShapeFile or Raster file of shapes for aggregations
+        |  <shapeId> Id field in shapefile ("false" if we are using raster data)
+        |  <maxTileSize> max tile size (Geotrellis file-reading option)
+        |  <layoutSize> size of floatingLayoutScheme (Geotrellis tiling option)
+        |  <numPartitions> partitions for raster RDDS - false if none (Geotrellis default of 1!)
+        |  <nlKeyA> Nightlight year 1 file path
+        |  <nlKeyB> Nightlight year 2 file path
+        |  <popKey> Population file path
         |  <popKey> code of desired population in ETL database
         |  <crush> Lower limit of population value to crush to 0
         |  <topCode> Upper limit of population value to topcode
@@ -41,6 +43,7 @@ object Growth {
     }
     val Array(bucket, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = args
 
+    // For interactive
     // val Array(tilePath, shapeKey, shapeId, maxTileSize, layoutSize, numPartitions, nlKeyA, nlKeyB, popKey, crush, topCode, outFile) = Array("upf-inequality-raw-geotifs", "simple/countries-europe.tif", "false", "256", "512", "1024", "simple/nl-2012-europe.tif", "simple/nl-2013-europe.tif", "simple/pop-2013-europe.tif", "4", "99999999", "s3://upf-inequality-raw-geotifs/growth-calcs-6-7")
 
 
@@ -49,17 +52,23 @@ object Growth {
       .getOrCreate()
     implicit val sc : SparkContext = spark.sparkContext
 
+    // Parse CLI args
     val tilePath = if (bucket == "false") None else Some(bucket)
-    val Seq(tileSize, layout, partitions) = Seq(maxTileSize, layoutSize, numPartitions).map(_.toInt)
+    val Seq(tileSize, layout) = Seq(maxTileSize, layoutSize).map(_.toInt)
+    val partitions = if (numPartitions == "false") None else Some(numPartitions.toInt)
 
+    // Read population RDD
     val pop = readRDD(tilePath, popKey, tileSize, layout, partitions)(sc)
 
+    // Read nightlight as RDD and create Wealth Rasters
     val Seq(wA, wB) = Seq(nlKeyA, nlKeyB)
       .map(readRDD(tilePath, _, tileSize, layout, partitions)(sc))
       .map(wealthRaster(_, pop, crush.toFloat, topCode.toFloat)) // use two pops for wealths!!
 
+    // Read shapes file (vector or raster)
     val shapes = if (shapeId != "false") readShapeFile(tilePath, shapeKey, shapeId, wA.metadata)(sc) else readRDD(tilePath, shapeKey, tileSize, layout, partitions)(sc)
 
+    // Calculate and write!
     growth(wA, wB, shapes).coalesce(1).write.csv(outFile)
   }
 
@@ -73,23 +82,25 @@ object Growth {
     years.map{ case (a,b) => b*b / a  }.reduce(_ + _)
   }
 
+  // Used for writing to CSV's
   case class DI(growth:Double, index: Long)
   case class GrowthRates(code: Int, growth:Double)
 
-  // create covariance???
-  // convert to dataset and use .stat.cov() ??
+  //
   def cov(rdd: RDD[(Double, Long)])(implicit spark: SparkSession) : Double = {
     import spark.implicits._
     rdd.map{ case (d,i) => DI(d,i) }.toDF.stat.cov("growth", "index")
   }
 
   case class DI2(growth:BigDecimal, index: Long)
-  def cov2(rdd: RDD[(BigDecimal, Long)])(implicit spark: SparkSession) : BigDecimal = {
+  def covBigDec(rdd: RDD[(BigDecimal, Long)])(implicit spark: SparkSession) : BigDecimal = {
     import spark.implicits._
     rdd.map{ case (d,i) => DI2(d,i) }.toDF.stat.cov("growth", "index")
   }
 
-  // Takes a simple RDD of one years nl/cap and the prev
+  /** Takes a simple RDD of a tuple: one years nl/cap and the prev.
+    * Returns a single value. Currently a BigDecimal to deal with instability.
+    */
   def growth(years: RDD[(Float, Float)])(implicit spark: SparkSession) : BigDecimal = {
     val mc = new java.math.MathContext(256)
 
@@ -97,15 +108,24 @@ object Growth {
     val y = years
       .filter{ case (a,b) => !a.isNaN && !b.isNaN }
       .sortBy(_._2) // sort by "wealth" in current year
+      .map{ case (a,b) => (a*100, b*100)}
       .map{ case (a,b) => (BigDecimal(a, mc), BigDecimal(b, mc))}
+
+    // return 0 for empty RDD's, otherwise will throw!
+    if (y.isEmpty) return BigDecimal(0, mc)
+
+    // we use y multiple times, so cache it
+    y.cache()
 
     // Calcs
     val tg = y.map(_._2).reduce(_ + _)
     val wg = weightedGrowth2(y)
     val inclusiveGrowth = y.map{ case (a, b) => b/wg - a/tg }
-    cov2(inclusiveGrowth.zipWithIndex)(spark)
+    covBigDec(inclusiveGrowth.zipWithIndex)(spark)
   }
 
+  /** Primary calculation class, returns growth given Wealth rasters and shapes!
+    */
   def growth[G <: Geometry](
     wealthA: ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]],
     wealthB: ContextRDD[SpatialKey, MultibandTile, TileLayerMetadata[SpatialKey]],
@@ -115,12 +135,16 @@ object Growth {
     import spark.implicits._
     val Seq(a,b) = Seq(wealthA, wealthB).map(groupByRasterShapes(shapes, _))
 
-    // Both are products of leftOuterJoin on shapes, so we zip together to
-    // combine the keys.
-    // the (0) index is the "wealth" part of the raster, we ignore the "population"
-    val l = a.zip(b).map{ case ((k, v1), (_, v2)) => (k, (v1(0), v2(0)))}.repartition(wealthA.partitions.length)
+    // Both are products of leftOuterJoin on shapes, so we zip together to combine the keys.
+    // The (0) index is the "wealth" part of the raster, we ignore the "population"
+    val l = a
+      .zip(b)
+      .map{ case ((k, v1), (_, v2)) => (k, (v1(0), v2(0)))}
+      .repartition(wealthA.partitions.length)
 
-    // skip key of 0????
+    // .persist
+    l.persist(StorageLevel.MEMORY_AND_DISK_SER)
+
     val keys = a.keys
       .filter(_ != 0)
       .distinct
@@ -137,6 +161,8 @@ object Growth {
       .toDS
   }
 }
+
+// Results are unstable!
 
 // +----+--------------------+
 // |code|              growth|
