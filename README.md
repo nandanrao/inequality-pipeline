@@ -24,6 +24,30 @@ The nightlight and the population rasters do not have the same origins, and as s
 
 Note that this area of the pipeline has NOT been formalized/built yet. I have simply run this ad-hoc for a few of the files, and have been working on those. This should be formalized somehow. It is tempting to do it on-demand in Geotrellis, but after some investigation it proved slower and buggier than simply using GDAL as a separate stage. I encourage further research into how to do this, however.
 
+## Some Scripts for Preprocessing
+
+#### Rasterizing a vector format.
+
+* -a gives the layer you want to turn into the raster value
+* -tr gives the pizel size
+* -te gives the extent
+```{sh}
+gdal_rasterize -a ADM0_CODE -tr 0.0083333 0.0083333 path/to/countries.shp -te __ __ __ __ /path/to/countries.tif
+```
+
+#### Resampling
+
+To resample, use gdalwarp.
+* -ot target type --
+```{sh}
+gdalwarp -tr SIZE SIZE -ot Float32 -te __ __ __ __ /path/to/infile.tif /path/to/outfile.tif
+```
+
+#### Reformatting
+```{sh}
+gdal_translate /path/to/infile.adf /path/to/outfile.tif
+```
+
 ## I/O
 
 Take a look at the IO object. Here you can see we were originally supporting S3, and have since begun the transition to Marenostrum's GPFS.
