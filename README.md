@@ -81,3 +81,7 @@ Both follow the same basic process: read the raster files, create wealth rasters
 ## Tests
 
 Most of the test coverage is focused on the Gini/Growth calculations doing what we want, as they are simply mathematical calculations that by nature fail silently, this is important to build on, in my opinion at least, as it's nothing more than a start!
+
+## Giving it a go
+
+spark-submit --class edu.upf.inequality.pipeline.Growth /path/to/Pipeline.jar false /path/shapes.tif false 256 256 1024 /path/nl-2013-small.tif /path/pop-2013-small.tif 3 252 480s /path/small-3-252
