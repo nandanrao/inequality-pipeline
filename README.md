@@ -38,7 +38,7 @@ gdal_rasterize -a ADM0_CODE -tr 0.0083333 0.0083333 path/to/countries.shp -te __
 #### Resampling
 
 To resample, use gdalwarp.
-* -ot target type --
+* -ot target type (we use Float32 for both nightlight and population).
 ```{sh}
 gdalwarp -tr SIZE SIZE -ot Float32 -te __ __ __ __ /path/to/infile.tif /path/to/outfile.tif
 ```
